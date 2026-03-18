@@ -7,7 +7,7 @@ Bot Telegram qui simule un entretien d'embauche de A à Z, propulsé par un LLM 
 1. **Collecte du CV** — L'utilisateur envoie son CV en texte, en PDF ou en DOCX. Le bot l'analyse via le LLM et le reformate en interne.
 2. **Description du poste** — L'utilisateur décrit l'entreprise et le poste visé (ou colle directement une offre d'emploi).
 3. **Entretien** — Le bot pose une série de questions d'entretien (10 par défaut, configurable). Chaque question est générée par le LLM en fonction du CV, du poste et des échanges précédents. La dernière question est toujours « Avez-vous une remarque ou une question avant de finir cet entretien ? ».
-4. **Bilan** — Une fois l'entretien terminé, le bot génère un compte rendu détaillé : impression générale, analyse question par question, forces, points positifs, axes d'amélioration et note sur 10.
+4. **Bilan PDF** — Une fois l'entretien terminé, le bot génère un compte rendu détaillé : impression générale, analyse question par question, forces, points positifs, axes d'amélioration et note sur 10, puis l'envoie directement sous forme de fichier PDF dans Telegram.
 5. **Beast Mode** — Si l'utilisateur est offensant ou provocateur à n'importe quel moment de la conversation, le bot bascule en mode clash et utilise le CV du candidat contre lui.
 
 ## Architecture
@@ -22,6 +22,7 @@ services/
   llm.py                Client OpenAI (OpenRouter), appels au LLM
   document.py           Extraction de texte depuis PDF / DOCX
   memory.py             Persistance des sessions en JSON (dossier memory/)
+  report PDF            Génération du compte rendu final au format PDF
 ```
 
 ## Configuration
@@ -52,7 +53,7 @@ python3 bot.py
 - `openai` — Client API pour OpenRouter (compatible OpenAI)
 - `pdfplumber` — Extraction de texte depuis les fichiers PDF
 - `python-docx` — Extraction de texte depuis les fichiers DOCX
-- `fpdf2` — Génération du bilan d'entretien en PDF
+- `fpdf2` — Génération et export du compte rendu final en PDF
 
 ## Commandes Telegram
 
