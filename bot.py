@@ -1,16 +1,24 @@
-import os
-from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+import logging
 
-load_dotenv()
+from telegram.ext import ApplicationBuilder
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("J'ai trop de fans. Dégage de mo feet connard. Tu peux retrouver mes prods sur obispoworld.com")
+import config
+from handlers.conversation import conversation_handler
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+
+def main() -> None:
+    app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+    app.add_handler(conversation_handler)
+    logger.info("Bot is running…")
+    app.run_polling()
+
 
 if __name__ == "__main__":
-    token = os.getenv("TELEGRAM_TOKEN")
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("Bot is running...")
-    app.run_polling()
+    main()
+
