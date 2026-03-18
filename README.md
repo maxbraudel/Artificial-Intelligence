@@ -41,9 +41,18 @@ Le modèle LLM est configuré dans `config.py`.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install python-telegram-bot python-dotenv openai pdfplumber python-docx
+pip install -r requirements.txt
 python3 bot.py
 ```
+
+## Dépendances
+
+- `python-telegram-bot` — Interface avec l'API Telegram
+- `python-dotenv` — Chargement des variables d'environnement depuis `.env`
+- `openai` — Client API pour OpenRouter (compatible OpenAI)
+- `pdfplumber` — Extraction de texte depuis les fichiers PDF
+- `python-docx` — Extraction de texte depuis les fichiers DOCX
+- `fpdf2` — Génération du bilan d'entretien en PDF
 
 ## Commandes Telegram
 

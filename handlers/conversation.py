@@ -1,6 +1,7 @@
 import io
 import logging
 
+from fpdf import FPDF
 from telegram import Update
 from telegram.ext import (
     CommandHandler,
@@ -38,6 +39,23 @@ def _build_qa_pairs(session: dict) -> list[tuple[str, str]]:
     qs = session["interview"]["questions"]
     ans = session["interview"]["answers"]
     return list(zip(qs, ans))
+
+
+def _generate_report_pdf(report_text: str) -> bytes:
+    """Generate a PDF from the report text and return raw bytes."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_font("Arial", "", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf")
+    pdf.add_font("Arial", "B", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")
+    pdf.set_font("Arial", "B", size=18)
+    pdf.cell(0, 12, "Bilan d'entretien", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(8)
+    pdf.set_font("Arial", "", size=11)
+    for line in report_text.split("\n"):
+        pdf.multi_cell(0, 6, line)
+        pdf.ln(1)
+    return pdf.output()
 
 
 # ── /start ──────────────────────────────────────────────────────────────────
@@ -145,17 +163,23 @@ async def handle_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     memory.save_session(user_id, chat_id, session)
     context.user_data["question_index"] = 0
 
-    await update.message.reply_text(
+    msg = await update.message.reply_text(
         f"C'est bon, on commence l'entretien. "
         f"Je vais te poser {config.NUMBER_OF_INTERVIEW_QUESTIONS} questions, "
         f"réponds comme tu le ferais face à un vrai recruteur.\n\n{question}"
     )
+    context.user_data["question_message_id"] = msg.message_id
     return INTERVIEWING
 
 
 # ── Interview Q&A handler ──────────────────────────────────────────────────
 
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Ignore stale messages sent before the question (e.g. split long messages)
+    q_msg_id = context.user_data.get("question_message_id", 0)
+    if update.message.message_id < q_msg_id:
+        return INTERVIEWING
+
     answer_text = update.message.text
     user_id, chat_id = _get_ids(update)
     session = memory.load_session(user_id, chat_id)
@@ -189,9 +213,10 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         memory.save_session(user_id, chat_id, session)
         context.user_data["question_index"] = answered_count
 
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"{eval_result['feedback']}\n\n{FINAL_QUESTION_TEXT}"
         )
+        context.user_data["question_message_id"] = msg.message_id
         return FINAL_QUESTION
 
     # Generate next question
@@ -203,15 +228,21 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     memory.save_session(user_id, chat_id, session)
     context.user_data["question_index"] = answered_count
 
-    await update.message.reply_text(
+    msg = await update.message.reply_text(
         f"{eval_result['feedback']}\n\n{next_question}"
     )
+    context.user_data["question_message_id"] = msg.message_id
     return INTERVIEWING
 
 
 # ── Final question handler ──────────────────────────────────────────────────
 
 async def handle_final_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Ignore stale messages sent before the question
+    q_msg_id = context.user_data.get("question_message_id", 0)
+    if update.message.message_id < q_msg_id:
+        return FINAL_QUESTION
+
     answer_text = update.message.text
     user_id, chat_id = _get_ids(update)
     session = memory.load_session(user_id, chat_id)
@@ -236,12 +267,15 @@ async def handle_final_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
     memory.save_session(user_id, chat_id, session)
 
     # Generate the report
-    await update.message.reply_text("C'est terminé ! Je te prépare ton bilan, ça peut prendre un moment...")
+    await update.message.reply_text("C'est terminé ! Je te prépare ton bilan en PDF, ça peut prendre un moment...")
 
     qa_pairs = _build_qa_pairs(session)
     report = await llm.generate_report(session["cv"], session["company"], qa_pairs)
 
-    await update.message.reply_text(report, parse_mode="Markdown")
+    pdf_bytes = _generate_report_pdf(report)
+    pdf_file = io.BytesIO(pdf_bytes)
+    pdf_file.name = "bilan_entretien.pdf"
+    await update.message.reply_document(document=pdf_file, filename="bilan_entretien.pdf")
     return ConversationHandler.END
 
 
