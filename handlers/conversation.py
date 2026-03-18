@@ -19,12 +19,10 @@ logger = logging.getLogger(__name__)
 AWAITING_CV, AWAITING_COMPANY, INTERVIEWING, FINAL_QUESTION, BEAST_MODE = range(5)
 
 GREETING = (
-    "👋 Bonjour ! Je suis votre simulateur d'entretien d'embauche.\n\n"
-    "Je vais vous faire passer un entretien complet et vous donner "
-    "un bilan détaillé à la fin.\n\n"
-    "Pour commencer, envoyez-moi votre CV :\n"
-    "• En texte directement dans le chat\n"
-    "• Ou en pièce jointe (PDF ou DOCX)"
+    "Salut ! Je vais te faire passer un entretien d'embauche et te faire "
+    "un retour détaillé à la fin.\n\n"
+    "Pour commencer, envoie-moi ton CV, soit en texte directement ici, "
+    "soit en pièce jointe (PDF ou DOCX)."
 )
 
 FINAL_QUESTION_TEXT = (
@@ -69,11 +67,11 @@ async def handle_cv_document(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not file_name.endswith((".pdf", ".docx")):
         await update.message.reply_text(
-            "⚠️ Format non supporté. Merci d'envoyer un fichier PDF ou DOCX."
+            "Je ne peux pas lire ce format, envoie-moi un PDF ou un DOCX."
         )
         return AWAITING_CV
 
-    await update.message.reply_text("📄 Lecture du document en cours…")
+    await update.message.reply_text("Je lis ton document, deux secondes...")
 
     file = await context.bot.get_file(doc)
     buffer = io.BytesIO()
@@ -87,8 +85,8 @@ async def handle_cv_document(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not raw_text.strip():
         await update.message.reply_text(
-            "⚠️ Je n'ai pas pu extraire de texte de ce document. "
-            "Essayez de m'envoyer votre CV en texte directement."
+            "Je n'arrive pas à lire le contenu de ce fichier. "
+            "Tu peux m'envoyer ton CV en texte directement ?"
         )
         return AWAITING_CV
 
@@ -96,14 +94,13 @@ async def handle_cv_document(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def _process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_text: str) -> int:
-    await update.message.reply_text("🔍 Analyse de votre CV…")
     user_id, chat_id = _get_ids(update)
 
     result = await llm.evaluate_cv(raw_text)
 
     if not result["satisfactory"]:
         await update.message.reply_text(
-            f"❌ {result['feedback']}\n\nMerci de renvoyer votre CV avec plus de détails."
+            f"{result['feedback']} Renvoie-moi ton CV avec un peu plus de détails."
         )
         return AWAITING_CV
 
@@ -113,9 +110,9 @@ async def _process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE, raw_te
     memory.save_session(user_id, chat_id, session)
 
     await update.message.reply_text(
-        f"✅ {result['feedback']}\n\n"
-        "Maintenant, décrivez-moi l'entreprise et le poste pour lequel "
-        "vous postulez (nom, secteur, poste visé, contexte…)."
+        f"{result['feedback']} "
+        "Maintenant dis-moi pour quel poste et quelle entreprise tu postules. "
+        "Tu peux me coller l'offre d'emploi ou juste me décrire le truc."
     )
     return AWAITING_COMPANY
 
@@ -128,15 +125,12 @@ async def handle_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if await llm.check_offensive(raw_text):
         session = memory.load_session(user_id, chat_id)
         return await _enter_beast_mode(update, context, session, raw_text)
-    await update.message.reply_text("🔍 Analyse de la description…")
-    user_id, chat_id = _get_ids(update)
 
     result = await llm.evaluate_company(raw_text)
 
     if not result["satisfactory"]:
         await update.message.reply_text(
-            f"❌ {result['feedback']}\n\n"
-            "Merci de fournir une description plus détaillée de l'entreprise et du poste."
+            f"{result['feedback']} Donne-moi un peu plus de détails sur le poste et l'entreprise."
         )
         return AWAITING_COMPANY
 
@@ -152,11 +146,9 @@ async def handle_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data["question_index"] = 0
 
     await update.message.reply_text(
-        "✅ Parfait ! L'entretien commence maintenant.\n\n"
-        "Je vais vous poser des questions comme le ferait un recruteur. "
-        "Répondez de manière développée et professionnelle.\n\n"
-        f"**Question 1/{config.NUMBER_OF_INTERVIEW_QUESTIONS}**\n\n{question}",
-        parse_mode="Markdown",
+        f"C'est bon, on commence l'entretien. "
+        f"Je vais te poser {config.NUMBER_OF_INTERVIEW_QUESTIONS} questions, "
+        f"réponds comme tu le ferais face à un vrai recruteur.\n\n{question}"
     )
     return INTERVIEWING
 
@@ -180,8 +172,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     if eval_result["status"] == "unsatisfactory":
         await update.message.reply_text(
-            f"🔄 {eval_result['feedback']}\n\n"
-            f"Merci de compléter votre réponse à cette question :\n\n{current_question}"
+            f"{eval_result['feedback']}\n\n{current_question}"
         )
         return INTERVIEWING
 
@@ -199,9 +190,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data["question_index"] = answered_count
 
         await update.message.reply_text(
-            f"👍 {eval_result['feedback']}\n\n"
-            f"**Question {total}/{total}**\n\n{FINAL_QUESTION_TEXT}",
-            parse_mode="Markdown",
+            f"{eval_result['feedback']}\n\n{FINAL_QUESTION_TEXT}"
         )
         return FINAL_QUESTION
 
@@ -215,9 +204,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data["question_index"] = answered_count
 
     await update.message.reply_text(
-        f"👍 {eval_result['feedback']}\n\n"
-        f"**Question {answered_count + 1}/{total}**\n\n{next_question}",
-        parse_mode="Markdown",
+        f"{eval_result['feedback']}\n\n{next_question}"
     )
     return INTERVIEWING
 
@@ -240,8 +227,7 @@ async def handle_final_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if eval_result["status"] == "unsatisfactory":
         await update.message.reply_text(
-            f"🔄 {eval_result['feedback']}\n\n"
-            f"Merci de compléter votre réponse :\n\n{current_question}"
+            f"{eval_result['feedback']}\n\n{current_question}"
         )
         return FINAL_QUESTION
 
@@ -250,15 +236,12 @@ async def handle_final_answer(update: Update, context: ContextTypes.DEFAULT_TYPE
     memory.save_session(user_id, chat_id, session)
 
     # Generate the report
-    await update.message.reply_text("📝 L'entretien est terminé ! Génération de votre bilan…")
+    await update.message.reply_text("C'est terminé ! Je te prépare ton bilan, ça peut prendre un moment...")
 
     qa_pairs = _build_qa_pairs(session)
     report = await llm.generate_report(session["cv"], session["company"], qa_pairs)
 
-    await update.message.reply_text(
-        f"📊 **Compte rendu de votre entretien**\n\n{report}",
-        parse_mode="Markdown",
-    )
+    await update.message.reply_text(report, parse_mode="Markdown")
     return ConversationHandler.END
 
 
@@ -297,7 +280,7 @@ async def handle_beast_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # ── Cancel ──────────────────────────────────────────────────────────────────
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ Entretien annulé. Tapez /start pour recommencer.")
+    await update.message.reply_text("Entretien annulé. Tu peux relancer avec /start quand tu veux.")
     return ConversationHandler.END
 
 
